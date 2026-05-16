@@ -1,0 +1,11 @@
+{
+  "name": "meshtastic-agent-v4",
+  "version": "4.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Full-spectrum Meshtastic AI gateway — text, telemetry, position, neighbors, waypoints, routes, files",
+  "dependencies": {
+    "@meshtastic/core": "*",
+    "@meshtastic/transport-node-serial": "*"
+  }
+}
