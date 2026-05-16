@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Full-spectrum Meshtastic AI gateway — text, telemetry, position, neighbors, waypoints, routes, files",
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-ai": "^0.74.0",
     "@meshtastic/core": "*",
     "@meshtastic/transport-node-serial": "*"
   }
