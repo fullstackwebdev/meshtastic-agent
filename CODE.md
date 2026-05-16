@@ -1,5 +1,5 @@
-# Catrepo dump – meshtastic-agent-v4 – 2026-05-16T21:59:21.198028+00:00
-# ≈ 12321 tokens
+# Catrepo dump – meshtastic-agent – 2026-05-16T22:33:09.998433+00:00
+# ≈ 12010 tokens
 
 ## File Structure
 
@@ -8,7 +8,7 @@
     ├── src
     │   ├── agent.js (2.3K tok)
     │   ├── commands.js (679 tok)
-    │   ├── config.js (332 tok)
+    │   ├── config.js (349 tok)
     │   ├── gateway.js (2.2K tok)
     │   ├── logger.js (136 tok)
     │   ├── mesh-db.js (1.9K tok)
@@ -17,7 +17,7 @@
     ├── CODE.md (0 tok)
     ├── preflight.sh (708 tok)
     ├── README.md (377 tok)
-    └── start.sh (331 tok)
+    └── start.sh (79 tok)
 
 1 directories, 12 files
 ```
@@ -86,59 +86,16 @@ echo -e "Passed: ${G}${PASS}${N}  Failed: ${R}${FAIL}${N}"
 
 ### start.sh
 #!/usr/bin/env bash
-# start.sh — V4 gateway watchdog with tmux, permissions, crash recovery
+# dev.sh — run the gateway directly, all logs to stdout
 set -euo pipefail
-
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG="/tmp/v4-gateway.log"
-SOCKET="/tmp/tmux-1000/gw"
-SESSION="v4"
-MAX_BACKOFF=60
 
-# ── Clean stale tmux socket ──
-rm -f "$SOCKET" /tmp/tmux-1000/default 2>/dev/null
-
-# ── Fix serial port permissions ──
+echo "[dev] fixing permissions..."
 sudo chmod 666 /dev/ttyUSB0 2>/dev/null || true
 
-# ── Kill any prior gateway processes ──
-pkill -f "node src/gateway" 2>/dev/null || true
-sleep 1
-
-# ── Start ──
-echo "[start] launching gateway..."
-echo "[start] log: $LOG"
-
-RESTART=0
-START_TIME=$(date +%s)
-
-while true; do
-  cd "$DIR"
-
-  tmux -S "$SOCKET" new-session -d -s "$SESSION" \
-    "node src/gateway.js 2>&1 | tee $LOG"
-
-  # Wait for it to either connect or crash
-  sleep 8
-
-  # Monitor — restart if it dies
-  while tmux -S "$SOCKET" has-session -t "$SESSION" 2>/dev/null; do
-    sleep 5
-  done
-
-  NOW=$(date +%s)
-  UPTIME=$((NOW - START_TIME))
-  RESTART=$((RESTART + 1))
-
-  DELAY=$((2 ** RESTART))
-  [ "$DELAY" -gt "$MAX_BACKOFF" ] && DELAY=$MAX_BACKOFF
-
-  echo "[start] $(date): crashed after ${UPTIME}s (restart #${RESTART}, waiting ${DELAY}s)" | tee -a "$LOG"
-  sleep "$DELAY"
-
-  sudo chmod 666 /dev/ttyUSB0 2>/dev/null || true
-  rm -f "$SOCKET" 2>/dev/null
-done
+echo "[dev] starting gateway on /dev/ttyUSB0..."
+cd "$DIR"
+exec node src/gateway.js
 
 
 ### CODE.md
@@ -225,12 +182,10 @@ export const QUEUE = {
 };
 
 export const PI_AGENT = {
-  cwd:      '/home/fullstack/dev/meshtastic',
-  agentDir: '/home/fullstack/dev/meshtastic/.pi/agent',
-  model: {
-    provider: 'local-llm',
-    name:     'Qwen3.6-27B-Q5_K_M-mtp.gguf',
-  },
+  // agentDir: set via PI_CODING_AGENT_DIR env var, or auto-discovered
+  //   by getAgentDir(). Falls back to .pi/agent relative to cwd.
+  // Model: auto-detected from models.json in agentDir.
+  // No hardcoded paths — works on any machine without changes.
 };
 
 export const ALERTS = {
@@ -257,12 +212,13 @@ export const FILE_XFER = {
  *   mesh_stats, mesh_send, mesh_locate, mesh_files
  */
 
-import { createAgentSession, defineTool } from '@earendil-works/pi-coding-agent';
-import { getModel, Type, StringEnum } from '@earendil-works/pi-ai';
-import { PI_AGENT, CHUNK } from './config.js';
+import { createAgentSession, defineTool, getAgentDir } from '@earendil-works/pi-coding-agent';
+import { Type } from '@earendil-works/pi-ai';
+import { CHUNK } from './config.js';
 import { log, debug, error } from './logger.js';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 
 export class Agent {
   constructor(meshDB, meshtastic) {
@@ -280,13 +236,18 @@ export class Agent {
 
     log(`[agent] creating session for node ${nodeId}`);
 
-    const sessionDir = path.join(PI_AGENT.cwd, 'v4-sessions', String(nodeId));
+    // Resolve agentDir dynamically — env var, SDK default, or local .pi/agent
+    const agentDir = process.env.PI_CODING_AGENT_DIR
+      || getAgentDir()
+      || path.join(process.cwd(), '.pi/agent');
+
+    const sessionDir = path.join(agentDir, '..', 'v4-sessions', String(nodeId));
     await fs.mkdir(sessionDir, { recursive: true });
 
     const { session } = await createAgentSession({
       cwd: sessionDir,
-      agentDir: PI_AGENT.agentDir,
-      model: getModel(PI_AGENT.model.provider, PI_AGENT.model.name),
+      agentDir,
+      // model omitted — auto-detected from models.json in agentDir
       continueSession: true,
       customTools: this.buildMeshTools(),
     });
