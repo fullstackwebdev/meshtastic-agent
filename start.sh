@@ -2,6 +2,9 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load .env defaults (can be overridden by command-line env vars)
+[ -f "$DIR/.env" ] && set -a && . "$DIR/.env" && set +a
+
 pkill -f "node src/gateway" 2>/dev/null || true
 sudo chmod 666 /dev/ttyUSB0 2>/dev/null || true
 cd "$DIR"

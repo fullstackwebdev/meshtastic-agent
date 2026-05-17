@@ -31,6 +31,7 @@ export class Agent {
     this._listAllModels();
 
     // Resolve configured model (null = auto-detect from settings.json)
+    log(`[agent] PI_AGENT.provider=${PI_AGENT.provider || '(unset)'}  PI_AGENT.model=${PI_AGENT.model || '(unset)'}`);
     if (PI_AGENT.provider && PI_AGENT.model) {
       this.configuredModel = this.modelRegistry.find(PI_AGENT.provider, PI_AGENT.model);
       if (!this.configuredModel) {
