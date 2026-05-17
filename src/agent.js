@@ -8,9 +8,9 @@
  *   mesh_stats, mesh_send, mesh_locate, mesh_files
  */
 
-import { createAgentSession, defineTool, getAgentDir } from '@earendil-works/pi-coding-agent';
+import { createAgentSession, defineTool, getAgentDir, AuthStorage, ModelRegistry } from '@earendil-works/pi-coding-agent';
 import { Type } from '@earendil-works/pi-ai';
-import { CHUNK } from './config.js';
+import { CHUNK, PI_AGENT } from './config.js';
 import { log, debug, error } from './logger.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -22,6 +22,44 @@ export class Agent {
     this.meshtastic = meshtastic;
     this.sessions   = new Map(); // nodeId → AgentSession
     this.meta       = new Map(); // nodeId → { lastActivity, history, currentOnToken }
+
+    // Set up auth + model registry for agent sessions
+    this.authStorage   = AuthStorage.create();
+    this.modelRegistry = ModelRegistry.create(this.authStorage);
+
+    // ── List all known models (from models.json) ──
+    this._listAllModels();
+
+    // Resolve configured model (null = auto-detect from settings.json)
+    if (PI_AGENT.provider && PI_AGENT.model) {
+      this.configuredModel = this.modelRegistry.find(PI_AGENT.provider, PI_AGENT.model);
+      if (!this.configuredModel) {
+        throw new Error(`Model not found: ${PI_AGENT.provider}/${PI_AGENT.model}`);
+      }
+      log(`[agent] model configured: ${PI_AGENT.provider}/${PI_AGENT.model}`);
+      log(`[agent]   name: ${this.configuredModel.name}`);
+      log(`[agent]   ctx: ${this.configuredModel.contextWindow}  maxOut: ${this.configuredModel.maxTokens}  reasoning: ${this.configuredModel.reasoning}`);
+      // Explicit model → don't continue old sessions (they'd restore a different model)
+      this.continueSessions = false;
+    } else {
+      this.configuredModel = null;
+      this.continueSessions = true;
+      log(`[agent] model: auto-detect from settings.json (defaultModel)`);
+    }
+  }
+
+  _listAllModels() {
+    log(`[agent] ── models in registry ──`);
+    const all = this.modelRegistry.getAll();
+    if (all.length === 0) {
+      log(`[agent]   (none found)`);
+    } else {
+      for (const m of all) {
+        const cfg = m.provider === PI_AGENT.provider && m.id === PI_AGENT.model ? ' ★CONFIGURED' : '';
+        log(`[agent]   ${m.provider}/${m.id}  («${m.name}» ctx=${m.contextWindow} reasoning=${m.reasoning})${cfg}`);
+      }
+    }
+    log(`[agent] ─────────────────────────`);
   }
 
   async getSession(nodeId) {
@@ -43,9 +81,12 @@ export class Agent {
     const { session } = await createAgentSession({
       cwd: sessionDir,
       agentDir,
-      // model omitted — auto-detected from models.json in agentDir
-      continueSession: true,
+      continueSession: this.continueSessions,
       customTools: this.buildMeshTools(),
+      authStorage: this.authStorage,
+      modelRegistry: this.modelRegistry,
+      // model: null = auto-detect from settings.json; configured via PI_AGENT_MODEL env
+      ...(this.configuredModel ? { model: this.configuredModel } : {}),
     });
 
     session.subscribe((event) => {

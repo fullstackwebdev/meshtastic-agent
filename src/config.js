@@ -23,8 +23,12 @@ export const QUEUE = {
 export const PI_AGENT = {
   // agentDir: set via PI_CODING_AGENT_DIR env var, or auto-discovered
   //   by getAgentDir(). Falls back to .pi/agent relative to cwd.
-  // Model: auto-detected from models.json in agentDir.
+  // Model: auto-detected from models.json in agentDir by default.
+  //   Override with PI_AGENT_MODEL and PI_AGENT_PROVIDER env vars.
+  //   e.g. PI_AGENT_PROVIDER=local-llm-3 PI_AGENT_MODEL=Qwen3.6-35B-A3B-APEX-I-Balanced.gguf
   // No hardcoded paths — works on any machine without changes.
+  model:    process.env.PI_AGENT_MODEL    || null,  // null = auto-detect from settings.json
+  provider: process.env.PI_AGENT_PROVIDER || null,  // null = auto-detect from settings.json
 };
 
 export const ALERTS = {
